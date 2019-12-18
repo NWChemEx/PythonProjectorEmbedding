@@ -192,7 +192,7 @@ def embedding_procedure(pyscf_mol,
                     continue
     
             shell_include[shell] = True
-            active_aos += aos_in_shell\
+            active_aos += aos_in_shell
             
         print(len(active_aos))
     

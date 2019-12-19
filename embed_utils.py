@@ -21,20 +21,24 @@ def flatten_basis(basis_set):
                     else:
                         atom_basis[i] = new_contraction
                         
-def purify(M, S):
+def purify(M, S, rtol=1e-5, atol=1e-8, max_iter=15):
     # McWeeny Purification of Density Matrix
     print('Begin Purification')
     i = 0
     P = M @ S
+
     omega = np.trace(np.linalg.matrix_power(P, 2) - P)**2
     print(i, 'Omega = ', omega)
-    while (i < 15) and not np.allclose(omega, 0.0):
+
+    while (i < max_iter) and not np.allclose(omega, 0.0, rtol=rtol, atol=atol):
         i+=1
         M = 3 * (M @ S @ M) - 2 * (M @ S @ M @ S @ M)
         P = M @ S
         omega = np.trace(np.linalg.matrix_power(P, 2) - P)**2
         print(i, 'Omega = ', omega)
-    if (i < 15):print('Purification Completed\n')
+
+    if (i < max_iter):print('Purification Completed\n')
     else:print("Max Iterations hit")
+
     return M
 

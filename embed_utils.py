@@ -8,21 +8,21 @@ def make_dm(coeffs, occupency):
 def flatten_basis(basis_set):
     # flattens out PySCF's basis set representation
     for atom_type in basis_set: 
-	# step through basis set by atoms
+        # step through basis set by atoms
         atom_basis = basis_set[atom_type]
 
         for i, i_val in enumerate(atom_basis):
-	    # for each shell, see contains more than one contraction
+            # for each shell, see contains more than one contraction
             if len(i_val[1]) > 2:
                 new_contractions = []
                 i_nparray = np.asarray(i_val[1:])
 
                 for contraction in range(len(i_val[1]) - 1):
-		    # split individual contractions into seperate lists
+                    # split individual contractions into seperate lists
                     new_contractions.append([i_val[0]] + i_nparray[:, [0, contraction + 1]].tolist())
 
                 for i_ctr, new_contraction in enumerate(new_contractions):
-		    # place the split contractions into the overall structure
+                    # place the split contractions into the overall structure
                     if i_ctr != 0:
                         atom_basis.insert(i + i_ctr, new_contraction)
                     else:

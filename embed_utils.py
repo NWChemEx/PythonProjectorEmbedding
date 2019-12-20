@@ -7,9 +7,11 @@ def make_dm(coeffs, occupency):
 
 def flatten_basis(basis_set):
     # flattens out PySCF's basis set representation
-    for atom_type in basis_set: 
+    flatten_set = deepcopy(basis_set)
+
+    for atom_type in flatten_set: 
         # step through basis set by atoms
-        atom_basis = basis_set[atom_type]
+        atom_basis = flatten_set[atom_type]
 
         for i, i_val in enumerate(atom_basis):
             # for each shell, see contains more than one contraction
@@ -27,6 +29,8 @@ def flatten_basis(basis_set):
                         atom_basis.insert(i + i_ctr, new_contraction)
                     else:
                         atom_basis[i] = new_contraction
+
+    return flatten_set
                         
 def purify(M, S, rtol=1e-5, atol=1e-8, max_iter=15):
     # McWeeny Purification of Density Matrix

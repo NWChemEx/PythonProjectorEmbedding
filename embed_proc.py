@@ -173,8 +173,7 @@ def embedding_procedure(pyscf_mol,
         
         # alter basis set to facilitate screening
         print(' Flattening Basis Set')
-        flattened_basis = deepcopy(mol._basis)
-        flatten_basis(flattened_basis)
+        flattened_basis = flatten_basis(mol._basis)
         mol.basis = flattened_basis
         mol.build()
         

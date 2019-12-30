@@ -266,7 +266,10 @@ def embedding_procedure(pyscf_mol,
     energy_elec_A_inB, energy_coulomb_A_inB = mf_embed.energy_elec(dm=den_mat_A_inB, vhf=v_A_inB, h1e=hcore)
     
     # perturbation correction
-    energy_projector = mu * np.dot(den_mat_A_inB, projector).trace()
+    if trunc_lambda:
+        energy_projector = mu * np.dot(den_mat_A_inB - den_mat_A, projector).trace()
+    else:
+        energy_projector = mu * np.dot(den_mat_A_inB, projector).trace()
 
     # first-order correction
     first_order_correction = np.dot(den_mat_A_inB - den_mat_A, v_embed).trace()

@@ -178,19 +178,19 @@ def embedding_procedure(pyscf_mol,
         mol.build()
         
         # screen basis sets for truncation
-        shell_include = [False] * mol.nbas
+        include = [False] * mol.nbas
         active_aos = []
         
         for shell in range(mol.nbas):
             aos_in_shell = list(range(mol.ao_loc[shell], mol.ao_loc[shell + 1]))
     
-            if (mol.bas_atom(shell) not in active_atoms): 
+            if (mol.bas_atom(shell) not in active_atoms): # shells on active atoms are automatically kept
                 for ao in aos_in_shell:
                     if ((den_mat_A[ao, ao] * ovlp[ao, ao]) > trunc_lambda): break
                 else:
-                    continue
+                    continue # if nothing trips the break, these AOs aren't kept and we move on
     
-            shell_include[shell] = True
+            include[shell] = True
             active_aos += aos_in_shell
             
         print(len(active_aos))
@@ -204,14 +204,19 @@ def embedding_procedure(pyscf_mol,
             for ia in range(mol.natm):
                 symbol = mol.atom_symbol(ia)
                 shell_ids = mol.atom_shell_ids(ia)
-                trunc_basis[symbol] = [trunc_basis[symbol][i] for i,shell in enumerate(shell_ids) if shell_include[shell]]
-                print(symbol, shell_ids, [shell_include[shell] for shell in shell_ids])
-                if trunc_basis[symbol] == []:
+
+                # Keep on the AOs in shells that were not screened
+                trunc_basis[symbol] = [trunc_basis[symbol][i] for i,shell in enumerate(shell_ids) if include[shell]]
+                print(symbol, shell_ids, [include[shell] for shell in shell_ids])
+
+                if trunc_basis[symbol] == []: # If all AOs on an atom are screened, remove the atom
                     del trunc_basis[symbol]
 
             # make molecule with smaller basis set
             mol.basis = trunc_basis
             mol.build(dump_input=True)
+
+            # Make appropiate mean field object with new molecule
             tinit_mf = type(init_mf)(mol)
             try:
                 tinit_mf.xc = init_mf.xc
@@ -234,9 +239,11 @@ def embedding_procedure(pyscf_mol,
             occ_mos = tinit_mf.get_occ(e_mos, c_mos)
             guess_d = make_dm(c_mos[:,occ_mos>0], occ_mos[occ_mos>0])
 
-            # truncated initial method
+            # truncated initial method (self embedded)
             tinit_mf.get_hcore = lambda *args: hcore_A_in_B
             tinit_mf.kernel(guess_d)
+
+            # Overwrite previous values
             den_mat_A = tinit_mf.make_rdm1()
             v_A = tinit_mf.get_veff(dm=den_mat_A)
             energy_elec_A, energy_coulomb_A = tinit_mf.energy_elec(dm=den_mat_A, vhf=v_A, h1e=hcore)

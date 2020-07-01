@@ -1,12 +1,15 @@
-import numpy as np
-from scipy import linalg
+"""
+Some utility functions
+"""
 from copy import deepcopy
+import numpy as np
 
 def make_dm(coeffs, occupency):
+    """Given MO coefficients and occupencies, return the density matrix"""
     return np.dot(coeffs * occupency, coeffs.T.conj())
 
 def flatten_basis(basis_set):
-    # flattens out PySCF's basis set representation
+    """Flattens out PySCF's basis set representation"""
     flatten_set = deepcopy(basis_set)
 
     for atom_type in flatten_set: 
@@ -21,7 +24,8 @@ def flatten_basis(basis_set):
 
                 for contraction in range(len(i_val[1]) - 1):
                     # split individual contractions into seperate lists
-                    new_contractions.append([i_val[0]] + i_nparray[:, [0, contraction + 1]].tolist())
+                    new_contractions.append([i_val[0]] \
+                        + i_nparray[:, [0, contraction + 1]].tolist())
 
                 for i_ctr, new_contraction in enumerate(new_contractions):
                     # place the split contractions into the overall structure
@@ -31,25 +35,27 @@ def flatten_basis(basis_set):
                         atom_basis[i] = new_contraction
 
     return flatten_set
-                        
-def purify(M, S, rtol=1e-5, atol=1e-8, max_iter=15):
-    # McWeeny Purification of Density Matrix
+
+def purify(matrix, overlap, rtol=1e-5, atol=1e-8, max_iter=15):
+    """McWeeny Purification of Density Matrix"""
     print('Begin Purification')
     i = 0
-    P = M @ S
+    density = matrix @ overlap
 
-    omega = np.trace(np.linalg.matrix_power(P, 2) - P)**2
+    omega = np.trace(np.linalg.matrix_power(density, 2) - density)**2
     print(i, 'Omega = ', omega)
 
     while (i < max_iter) and not np.allclose(omega, 0.0, rtol=rtol, atol=atol):
-        i+=1
-        M = 3 * (M @ S @ M) - 2 * (M @ S @ M @ S @ M)
-        P = M @ S
-        omega = np.trace(np.linalg.matrix_power(P, 2) - P)**2
+        i += 1
+        matrix = 3 * (matrix @ overlap @ matrix) \
+            - 2 * (matrix @ overlap @ matrix @ overlap @ matrix)
+        density = matrix @ overlap
+        omega = np.trace(np.linalg.matrix_power(density, 2) - density)**2
         print(i, 'Omega = ', omega)
 
-    if (i < max_iter):print('Purification Completed\n')
-    else:print("Max Iterations hit")
+    if i < max_iter:
+        print('Purification Completed\n')
+    else:
+        print("Max Iterations hit")
 
-    return M
-
+    return matrix

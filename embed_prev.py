@@ -1,7 +1,13 @@
-from pyscf import gto, scf, dft, lo, mp, cc, tools
-from .embed_utils import make_dm
-from .embed_proc import mulliken_partition
+"""
+Old version of the embedding procedure
+Saved for legacy reasons
+"""
+
+from pyscf import scf, dft, lo, mp, cc
 import numpy as np
+from projectorEmbedding.embed_utils import make_dm
+from projectorEmbedding.embed_proc import mulliken_partition
+
 
 def embedding_procedure(pyscf_mol,
                         init_mf,
@@ -14,9 +20,10 @@ def embedding_procedure(pyscf_mol,
                         distribute_mos=mulliken_partition,
                         debug_dist=False,
                         molden=None):
+    """Performs a projector embedding calculation"""
     # Manby-like embedding procedure. Kinda rigid at the moment.
     mol = pyscf_mol.copy()
-    
+
     # get intermediates
     ovlp = init_mf.get_ovlp()
     mo_occ = init_mf.mo_occ

@@ -1,8 +1,11 @@
+"""
+Perform projector based embedding
+"""
+from copy import deepcopy
 from pyscf import gto, scf, dft, lo, mp, cc, tools
-from .embed_utils import make_dm, flatten_basis, purify
 import numpy as np
 from scipy import linalg
-from copy import deepcopy
+from projectorEmbedding.embed_utils import make_dm, flatten_basis, purify
 
 def mulliken_partition(pyscf_mol, pyscf_mf, active_atoms=None, C_occ=None, charge_threshold=0.4, debug=False):
     # splits the MOs into active and frozen parts based on charge threshold.

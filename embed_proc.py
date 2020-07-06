@@ -97,7 +97,7 @@ def spade_partition(pyscf_mol, pyscf_mf, active_atoms=None, c_occ=None):
 
     return c_a, c_b
 
-def embedding_procedure(pyscf_mol, init_mf, active_atoms=None, xc=None, corr_meth=None, mu=10**6,
+def embedding_procedure(pyscf_mol, init_mf, active_atoms=None, embed_meth=None, mu=10**6,
                         trunc_lambda=None, localize=True, distribute_mos=mulliken_partition,
                         charge_threshold=0.4):
     """Manby-like embedding procedure."""
@@ -167,7 +167,7 @@ def embedding_procedure(pyscf_mol, init_mf, active_atoms=None, xc=None, corr_met
         if len(active_aos) == mol.nao:
             print("No AOs Truncated")
             trunc_lambda = None
-        else:            
+        else:
             # make truncated basis set
             print(' Making Truncated Basis Set')
             trunc_basis = deepcopy(flattened_basis)
@@ -217,13 +217,11 @@ def embedding_procedure(pyscf_mol, init_mf, active_atoms=None, xc=None, corr_met
             energy_a, _ = tinit_mf.energy_elec(dm=den_mat_a, vhf=v_a, h1e=hcore_a_in_b)
 
     # make embedding mean field object
-    if (xc is None) or (xc.lower() == 'rhf'):
+    if embed_meth.lower() in ['rhf', 'mp2', 'ccsd', 'ccsd(t)']:
         mf_embed = scf.RHF(mol)
     else:
-        if corr_meth:
-            print("***Attempting to perform correlated WF method on top of DFT***")
         mf_embed = dft.RKS(mol)
-        mf_embed.xc = xc
+        mf_embed.xc = embed_meth
     mf_embed.get_hcore = lambda *args: hcore_a_in_b
 
     # run embedded SCF
@@ -238,20 +236,17 @@ def embedding_procedure(pyscf_mol, init_mf, active_atoms=None, xc=None, corr_met
     results = (embed_energy, )
 
     # correlated WF method
-    if corr_meth:
-        if corr_meth.lower()=='mp2':
-            embed_corr = mp.MP2(mf_embed)
-            embed_corr.kernel()
-            results = results + (embed_corr.e_corr,)
+    if embed_meth.lower() == 'mp2':
+        embed_corr = mp.MP2(mf_embed)
+        embed_corr.kernel()
+        results = results + (embed_corr.e_corr,)
 
-        elif corr_meth.lower() in ['ccsd', 'ccsd(t)']:
-            embed_corr = cc.CCSD(mf_embed)
-            embed_corr.kernel()
-            results = results + (embed_corr.emp2,)
-            results = results + (embed_corr.e_corr - embed_corr.emp2,)
-
-        if corr_meth.lower()=='ccsd(t)':
+    elif embed_meth.lower() in ['ccsd', 'ccsd(t)']:
+        embed_corr = cc.CCSD(mf_embed)
+        embed_corr.kernel()
+        results = results + (embed_corr.emp2,)
+        results = results + (embed_corr.e_corr - embed_corr.emp2,)
+        if embed_meth.lower() == 'ccsd(t)':
             results = results + (embed_corr.ccsd_t(),)
 
     return results
-

@@ -154,7 +154,7 @@ def embedding_procedure(pyscf_mol,
     projector = np.dot(np.dot(ovlp, den_mat_B), ovlp)
     
     # get electronic energy for A
-    energy_A, _ = init_mf.energy_elec(dm=den_mat_A, vhf=v_A, h1e=hcore + v_embed)
+    energy_A, _ = init_mf.energy_elec(dm=den_mat_A, vhf=v_A, h1e=hcore + v_embed + (mu * projector))
     
     # build embedding potential
     hcore_A_in_B = hcore + v_embed + (mu * projector)
@@ -250,16 +250,10 @@ def embedding_procedure(pyscf_mol,
     mf_embed.get_hcore = lambda *args: hcore_A_in_B
 
     # run embedded SCF
-    mf_embed.kernel(den_mat_A)
+    tot_energy_A_inB = mf_embed.kernel(den_mat_A)
 
-    # get new values from embedded SCF
-    den_mat_A_inB = mf_embed.make_rdm1()
-
-    # make potential for embedded result
-    v_A_inB = mf_embed.get_veff(mol, den_mat_A_inB)
-    
     # get electronic energy for embedded part
-    energy_A_inB, _ = mf_embed.energy_elec(dm=den_mat_A_inB, vhf=v_A_inB)
+    energy_A_inB = tot_energy_A_inB - mf_embed.energy_nuc()
 
     # recombined energy with embedded part
     embed_energy = energy_A_inB - energy_A + tot_energy_AB
@@ -280,8 +274,7 @@ def embedding_procedure(pyscf_mol,
             rv = rv + (embed_corr.e_corr - embed_corr.emp2,)
             
         if corr_meth.lower()=='ccsd(t)':
-            embed_corr_et = embed_corr.ccsd_t()
-            rv = rv + (embed_corr_et,)
+            rv = rv + (embed_corr.ccsd_t(),)
         
     return rv
 

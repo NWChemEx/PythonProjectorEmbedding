@@ -12,7 +12,7 @@ def flatten_basis(basis_set):
     """Flattens out PySCF's basis set representation"""
     flatten_set = deepcopy(basis_set)
 
-    for atom_type in flatten_set: 
+    for atom_type in flatten_set:
         # step through basis set by atoms
         atom_basis = flatten_set[atom_type]
 

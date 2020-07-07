@@ -12,27 +12,22 @@ from scipy import linalg
 from projectorEmbedding.embed_utils import make_dm
 from projectorEmbedding.embed_utils import flatten_basis
 from projectorEmbedding.embed_utils import purify
+from projectorEmbedding.embed_utils import screen_aos
 
-def mulliken_partition(pyscf_mol, pyscf_mf, active_atoms=None, c_occ=None, charge_threshold=0.4):
+def mulliken_partition(pyscf_mf, active_atoms=None, c_occ=None, charge_threshold=0.4):
     """splits the MOs into active and frozen parts based on charge threshold."""
 
-    # things coming from molecule.
-    offset_ao_by_atom = pyscf_mol.offset_ao_by_atom()
-
-    # things coming from mean field calculation.
-    mo_occ = pyscf_mf.mo_occ
+    offset_ao_by_atom = pyscf_mf.mol.offset_ao_by_atom()
 
     # if occupied coeffs aren't provided, get the ones from the mean field results.
     if c_occ is None:
-        c_occ = pyscf_mf.mo_coeff[:, mo_occ > 0]
+        c_occ = pyscf_mf.mo_coeff[:, pyscf_mf.mo_occ > 0]
     overlap = pyscf_mf.get_ovlp()
 
     # Hacky way to handle passing threshold.
     # Allows the function call for both partition schemes to be the same in procedure function.
-    try:
+    if hasattr(pyscf_mf, 'charge_threshold'):
         charge_threshold = pyscf_mf.charge_threshold
-    except:
-        pass
 
     # for each mo, go through active atoms and check the charge on that atom.
     # if charge on active atom is greater than threshold, mo added to active list.
@@ -44,7 +39,7 @@ def mulliken_partition(pyscf_mol, pyscf_mf, active_atoms=None, c_occ=None, charg
 
     for mo_i in range(c_occ.shape[1]):
 
-        rdm_mo = make_dm(c_occ[:, [mo_i]], mo_occ[mo_i])
+        rdm_mo = make_dm(c_occ[:, [mo_i]], pyscf_mf.mo_occ[mo_i])
 
         atoms = active_atoms
 
@@ -66,11 +61,11 @@ def mulliken_partition(pyscf_mol, pyscf_mf, active_atoms=None, c_occ=None, charg
 
     return c_occ[:, active_mos], c_occ[:, frozen_mos]
 
-def spade_partition(pyscf_mol, pyscf_mf, active_atoms=None, c_occ=None):
+def spade_partition(pyscf_mf, active_atoms=None, c_occ=None):
     """SPADE partitioning scheme"""
 
     # things coming from molecule.
-    offset_ao_by_atom = pyscf_mol.offset_ao_by_atom()
+    offset_ao_by_atom = pyscf_mf.mol.offset_ao_by_atom()
 
     # things coming from mean field calculation.
     mo_occ = pyscf_mf.mo_occ
@@ -97,44 +92,42 @@ def spade_partition(pyscf_mol, pyscf_mf, active_atoms=None, c_occ=None):
 
     return c_a, c_b
 
-def embedding_procedure(pyscf_mol, init_mf, active_atoms=None, embed_meth=None, mu=10**6,
+def embedding_procedure(init_mf, active_atoms=None, embed_meth=None, mu_val=10**6,
                         trunc_lambda=None, localize=True, distribute_mos=mulliken_partition,
                         charge_threshold=0.4):
     """Manby-like embedding procedure."""
-    mol = pyscf_mol.copy()
-    tot_energy_ab = init_mf.e_tot
-
-    # get intermediates
+    # initial information
+    mol = init_mf.mol.copy()
     ovlp = init_mf.get_ovlp()
-    hcore = init_mf.get_hcore()
-    mo_occ = init_mf.mo_occ
-    c_occ = init_mf.mo_coeff[:, mo_occ > 0]
+    c_occ = init_mf.mo_coeff[:, init_mf.mo_occ > 0]
+
+    # localize orbitals
     if localize:
         c_occ = lo.PM(mol, c_occ).kernel()
 
-    # split mos
+    # get active mos
     init_mf.charge_threshold = charge_threshold
-    c_occ_a, _ = distribute_mos(mol, init_mf, active_atoms=active_atoms, c_occ=c_occ)
+    c_occ_a, _ = distribute_mos(init_mf, active_atoms=active_atoms, c_occ=c_occ)
 
     # make full and subsystem densities
-    den_mat_ab = make_dm(c_occ, mo_occ[mo_occ > 0])
-    den_mat_a = make_dm(c_occ_a, mo_occ[:c_occ_a.shape[1]])
-    den_mat_b = den_mat_ab - den_mat_a
+    dens = {}
+    dens['ab'] = make_dm(c_occ, init_mf.mo_occ[init_mf.mo_occ > 0])
+    dens['a'] = make_dm(c_occ_a, init_mf.mo_occ[:c_occ_a.shape[1]])
+    dens['b'] = dens['ab'] - dens['a']
 
-    # get full and subsystem potential terms and new make potentials
-    v_ab = init_mf.get_veff(mol=mol, dm=den_mat_ab)
-    v_a = init_mf.get_veff(mol=mol, dm=den_mat_a)
-
-    v_embed = v_ab - v_a
-    projector = np.dot(np.dot(ovlp, den_mat_b), ovlp)
-
-    # get electronic energy for A
-    energy_a, _ = init_mf.energy_elec(dm=den_mat_a, vhf=v_a, h1e=hcore + v_embed + (mu * projector))
+    # get subsystem A potential
+    v_a = init_mf.get_veff(dm=dens['a'])
 
     # build embedding potential
-    hcore_a_in_b = hcore + v_embed + (mu * projector)
-    n_act_elecs = int(sum(mo_occ[:c_occ_a.shape[1]]))
-    mol.nelectron = n_act_elecs
+    hcore_a_in_b = init_mf.get_hcore()
+    hcore_a_in_b += init_mf.get_veff(dm=dens['ab']) - v_a
+    hcore_a_in_b += mu_val * (ovlp @ dens['b'] @ ovlp)
+
+    # get electronic energy for A
+    energy_a, _ = init_mf.energy_elec(dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
+
+    # set new number of electrons
+    mol.nelectron = int(sum(init_mf.mo_occ[:c_occ_a.shape[1]]))
 
     if trunc_lambda:
         print('Truncating AO Space')
@@ -146,28 +139,10 @@ def embedding_procedure(pyscf_mol, init_mf, active_atoms=None, embed_meth=None, 
         mol.build()
 
         # screen basis sets for truncation
-        include = [False] * mol.nbas
-        active_aos = []
-
-        for shell in range(mol.nbas):
-            aos_in_shell = list(range(mol.ao_loc[shell], mol.ao_loc[shell + 1]))
-
-            if mol.bas_atom(shell) not in active_atoms: # shells on active atoms are always kept
-                for ao_i in aos_in_shell:
-                    if (den_mat_a[ao_i, ao_i] * ovlp[ao_i, ao_i]) > trunc_lambda:
-                        break
-                else: # if nothing trips the break, these AOs aren't kept and we move on
-                    continue
-
-            include[shell] = True
-            active_aos += aos_in_shell
-
+        active_aos, include = screen_aos(mol, active_atoms, dens['a'], ovlp, trunc_lambda)
         print("Active AOs:", len(active_aos), "/", mol.nao)
 
-        if len(active_aos) == mol.nao:
-            print("No AOs Truncated")
-            trunc_lambda = None
-        else:
+        if len(active_aos) != mol.nao:
             # make truncated basis set
             print(' Making Truncated Basis Set')
             trunc_basis = deepcopy(flattened_basis)
@@ -175,35 +150,31 @@ def embedding_procedure(pyscf_mol, init_mf, active_atoms=None, embed_meth=None, 
                 symbol = mol.atom_symbol(i_atom)
                 shell_ids = mol.atom_shell_ids(i_atom)
 
-                # Keep on the AOs in shells that were not screened
+                # keep only the AOs in shells that were not screened
                 trunc_basis[symbol] = \
                     [trunc_basis[symbol][i] for i, shell in enumerate(shell_ids) if include[shell]]
                 print(symbol, shell_ids, [include[shell] for shell in shell_ids])
 
-                if trunc_basis[symbol] == []: # If all AOs on an atom are screened, remove the atom
+                if trunc_basis[symbol] == []: # if all AOs on an atom are gone, remove it
                     del trunc_basis[symbol]
 
             # make molecule with smaller basis set
             mol.basis = trunc_basis
             mol.build(dump_input=True)
 
-            # Make appropiate mean field object with new molecule
+            # make appropiate mean field object with new molecule
             tinit_mf = type(init_mf)(mol)
-            try:
+            if hasattr(init_mf, 'xc'):
                 tinit_mf.xc = init_mf.xc
-            except:
-                pass
 
             # make truncated tensors
-            hcore_a_in_b = hcore_a_in_b[np.ix_(active_aos, active_aos)]
-            tden_mat_a = den_mat_a[np.ix_(active_aos, active_aos)]
-            tovlp = ovlp[np.ix_(active_aos, active_aos)]
-            pure_d_a = 2 * purify(tden_mat_a / 2, tovlp)
+            mesh = np.ix_(active_aos, active_aos)
+            hcore_a_in_b = hcore_a_in_b[mesh]
+            pure_d_a = 2 * purify(dens['a'][mesh] / 2, ovlp[mesh])
 
             # make initial guess
-            tveff = tinit_mf.get_veff(dm=pure_d_a)
-            h_eff = hcore_a_in_b + tveff
-            e_mos, c_mos = tinit_mf.eig(h_eff, tovlp)
+            h_eff = hcore_a_in_b + tinit_mf.get_veff(dm=pure_d_a)
+            e_mos, c_mos = tinit_mf.eig(h_eff, ovlp[mesh])
             occ_mos = tinit_mf.get_occ(e_mos, c_mos)
             guess_d = make_dm(c_mos[:, occ_mos > 0], occ_mos[occ_mos > 0])
 
@@ -211,29 +182,27 @@ def embedding_procedure(pyscf_mol, init_mf, active_atoms=None, embed_meth=None, 
             tinit_mf.get_hcore = lambda *args: hcore_a_in_b
             tinit_mf.kernel(guess_d)
 
-            # Overwrite previous values
-            den_mat_a = tinit_mf.make_rdm1()
-            v_a = tinit_mf.get_veff(dm=den_mat_a)
-            energy_a, _ = tinit_mf.energy_elec(dm=den_mat_a, vhf=v_a, h1e=hcore_a_in_b)
+            # overwrite previous values
+            dens['a'] = tinit_mf.make_rdm1()
+            v_a = tinit_mf.get_veff(dm=dens['a'])
+            energy_a, _ = tinit_mf.energy_elec(dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
 
     # make embedding mean field object
     if embed_meth.lower() in ['rhf', 'mp2', 'ccsd', 'ccsd(t)']:
         mf_embed = scf.RHF(mol)
-    else:
+    else: # assume anything else is a functional name
         mf_embed = dft.RKS(mol)
         mf_embed.xc = embed_meth
     mf_embed.get_hcore = lambda *args: hcore_a_in_b
 
     # run embedded SCF
-    tot_energy_a_in_b = mf_embed.kernel(den_mat_a)
+    tot_energy_a_in_b = mf_embed.kernel(dens['a'])
 
     # get electronic energy for embedded part
     energy_a_in_b = tot_energy_a_in_b - mf_embed.energy_nuc()
 
     # recombined energy with embedded part
-    embed_energy = energy_a_in_b - energy_a + tot_energy_ab
-
-    results = (embed_energy, )
+    results = (init_mf.e_tot - energy_a + energy_a_in_b, )
 
     # correlated WF method
     if embed_meth.lower() == 'mp2':

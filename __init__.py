@@ -3,6 +3,7 @@ from projectorEmbedding.embed_utils import make_dm
 from projectorEmbedding.embed_utils import flatten_basis
 from projectorEmbedding.embed_utils import purify
 from projectorEmbedding.embed_utils import screen_aos
+from projectorEmbedding.embed_utils import truncate_basis
 
 from projectorEmbedding.embed_proc import mulliken_partition
 from projectorEmbedding.embed_proc import spade_partition

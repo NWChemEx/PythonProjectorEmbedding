@@ -8,9 +8,9 @@ def make_dm(coeffs, occupency):
     """Given MO coefficients and occupencies, return the density matrix"""
     return np.dot(coeffs * occupency, coeffs.T.conj())
 
-def flatten_basis(basis_set):
+def flatten_basis(mol):
     """Flattens out PySCF's basis set representation"""
-    flatten_set = deepcopy(basis_set)
+    flatten_set = deepcopy(mol._basis)
 
     for atom_type in flatten_set:
         # step through basis set by atoms
@@ -35,6 +35,24 @@ def flatten_basis(basis_set):
                         atom_basis[i] = new_contraction
 
     return flatten_set
+
+def truncate_basis(mol, mask):
+    """Truncate the molecule basis set according to the shell mask"""
+    print(' Making Truncated Basis Set')
+    trunc_basis = deepcopy(mol._basis)
+    for i_atom in range(mol.natm):
+        symbol = mol.atom_symbol(i_atom)
+        shell_ids = mol.atom_shell_ids(i_atom)
+
+        # keep only the AOs in shells that were not screened
+        trunc_basis[symbol] = \
+            [trunc_basis[symbol][i] for i, shell in enumerate(shell_ids) if mask[shell]]
+        print(symbol, shell_ids, [mask[shell] for shell in shell_ids])
+
+        if trunc_basis[symbol] == []: # if all AOs on an atom are gone, remove it
+            del trunc_basis[symbol]
+
+    return trunc_basis
 
 def purify(matrix, overlap, rtol=1e-5, atol=1e-8, max_iter=15):
     """McWeeny Purification of Density Matrix"""

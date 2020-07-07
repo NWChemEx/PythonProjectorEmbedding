@@ -1,65 +1,63 @@
 """
 Perform projector based embedding
 """
-from copy import deepcopy
 from pyscf import scf
 from pyscf import dft
 from pyscf import lo
 from pyscf import mp
 from pyscf import cc
 import numpy as np
-from scipy import linalg
+from scipy.linalg import fractional_matrix_power
 from projectorEmbedding.embed_utils import make_dm
 from projectorEmbedding.embed_utils import flatten_basis
 from projectorEmbedding.embed_utils import purify
 from projectorEmbedding.embed_utils import screen_aos
+from projectorEmbedding.embed_utils import truncate_basis
 
-def mulliken_partition(pyscf_mf, active_atoms=None, c_occ=None, charge_threshold=0.4):
+def mulliken_partition(charge_threshold=0.4):
     """splits the MOs into active and frozen parts based on charge threshold."""
+    def internal(pyscf_mf, active_atoms=None, c_occ=None):
+        offset_ao_by_atom = pyscf_mf.mol.offset_ao_by_atom()
 
-    offset_ao_by_atom = pyscf_mf.mol.offset_ao_by_atom()
+        # if occupied coeffs aren't provided, get the ones from the mean field results.
+        if c_occ is None:
+            c_occ = pyscf_mf.mo_coeff[:, pyscf_mf.mo_occ > 0]
+        overlap = pyscf_mf.get_ovlp()
 
-    # if occupied coeffs aren't provided, get the ones from the mean field results.
-    if c_occ is None:
-        c_occ = pyscf_mf.mo_coeff[:, pyscf_mf.mo_occ > 0]
-    overlap = pyscf_mf.get_ovlp()
+        # for each mo, go through active atoms and check the charge on that atom.
+        # if charge on active atom is greater than threshold, mo added to active list.
+        active_mos = []
+        if active_atoms == []: # default case for NO active atoms
+            return c_occ[:, []], c_occ[:, :]
+        if active_atoms is None:
+            return c_occ[:, :], c_occ[:, []]
 
-    # Hacky way to handle passing threshold.
-    # Allows the function call for both partition schemes to be the same in procedure function.
-    if hasattr(pyscf_mf, 'charge_threshold'):
-        charge_threshold = pyscf_mf.charge_threshold
+        for mo_i in range(c_occ.shape[1]):
 
-    # for each mo, go through active atoms and check the charge on that atom.
-    # if charge on active atom is greater than threshold, mo added to active list.
-    active_mos = []
-    if active_atoms == []: # default case for NO active atoms
-        return c_occ[:, []], c_occ[:, :]
-    if active_atoms is None:
-        return c_occ[:, :], c_occ[:, []]
+            rdm_mo = make_dm(c_occ[:, [mo_i]], pyscf_mf.mo_occ[mo_i])
 
-    for mo_i in range(c_occ.shape[1]):
+            atoms = active_atoms
 
-        rdm_mo = make_dm(c_occ[:, [mo_i]], pyscf_mf.mo_occ[mo_i])
+            for atom in atoms:
+                offset = offset_ao_by_atom[atom, 2]
+                extent = offset_ao_by_atom[atom, 3]
 
-        atoms = active_atoms
+                overlap_atom = overlap[:, offset:extent]
+                rdm_mo_atom = rdm_mo[:, offset:extent]
 
-        for atom in atoms:
-            offset = offset_ao_by_atom[atom, 2]
-            extent = offset_ao_by_atom[atom, 3]
+                q_atom_mo = np.einsum('ij,ij->', rdm_mo_atom, overlap_atom)
 
-            overlap_atom = overlap[:, offset:extent]
-            rdm_mo_atom = rdm_mo[:, offset:extent]
+                if q_atom_mo > internal.charge_threshold:
+                    active_mos.append(mo_i)
+                    break
 
-            q_atom_mo = np.einsum('ij,ij->', rdm_mo_atom, overlap_atom)
+        # all mos not active are frozen
+        frozen_mos = [i for i in range(c_occ.shape[1]) if i not in active_mos]
 
-            if q_atom_mo > charge_threshold:
-                active_mos.append(mo_i)
-                break
+        return c_occ[:, active_mos], c_occ[:, frozen_mos]
+    internal.charge_threshold = charge_threshold
 
-    # all mos not active are frozen
-    frozen_mos = [i for i in range(c_occ.shape[1]) if i not in active_mos]
-
-    return c_occ[:, active_mos], c_occ[:, frozen_mos]
+    return internal
 
 def spade_partition(pyscf_mf, active_atoms=None, c_occ=None):
     """SPADE partitioning scheme"""
@@ -77,7 +75,7 @@ def spade_partition(pyscf_mf, active_atoms=None, c_occ=None):
     for atom in active_atoms:
         active_aos += list(range(offset_ao_by_atom[atom, 2], offset_ao_by_atom[atom, 3]))
 
-    overlap_sqrt = linalg.fractional_matrix_power(overlap, 0.5)
+    overlap_sqrt = fractional_matrix_power(overlap, 0.5)
     c_orthogonal_ao = (overlap_sqrt @ c_occ)[active_aos, :]
     _, s_vals, v_vecs = np.linalg.svd(c_orthogonal_ao, full_matrices=True)
 
@@ -92,9 +90,9 @@ def spade_partition(pyscf_mf, active_atoms=None, c_occ=None):
 
     return c_a, c_b
 
-def embedding_procedure(init_mf, active_atoms=None, embed_meth=None, mu_val=10**6,
-                        trunc_lambda=None, localize=True, distribute_mos=mulliken_partition,
-                        charge_threshold=0.4):
+def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
+                        mu_val=10**6, trunc_lambda=None, localize=True,
+                        distribute_mos=mulliken_partition(0.4)):
     """Manby-like embedding procedure."""
     # initial information
     mol = init_mf.mol.copy()
@@ -106,7 +104,6 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None, mu_val=10**
         c_occ = lo.PM(mol, c_occ).kernel()
 
     # get active mos
-    init_mf.charge_threshold = charge_threshold
     c_occ_a, _ = distribute_mos(init_mf, active_atoms=active_atoms, c_occ=c_occ)
 
     # make full and subsystem densities
@@ -134,9 +131,7 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None, mu_val=10**
 
         # alter basis set to facilitate screening
         print(' Flattening Basis Set')
-        flattened_basis = flatten_basis(mol._basis)
-        mol.basis = flattened_basis
-        mol.build()
+        mol.build(basis=flatten_basis(mol))
 
         # screen basis sets for truncation
         active_aos, include = screen_aos(mol, active_atoms, dens['a'], ovlp, trunc_lambda)
@@ -144,23 +139,7 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None, mu_val=10**
 
         if len(active_aos) != mol.nao:
             # make truncated basis set
-            print(' Making Truncated Basis Set')
-            trunc_basis = deepcopy(flattened_basis)
-            for i_atom in range(mol.natm):
-                symbol = mol.atom_symbol(i_atom)
-                shell_ids = mol.atom_shell_ids(i_atom)
-
-                # keep only the AOs in shells that were not screened
-                trunc_basis[symbol] = \
-                    [trunc_basis[symbol][i] for i, shell in enumerate(shell_ids) if include[shell]]
-                print(symbol, shell_ids, [include[shell] for shell in shell_ids])
-
-                if trunc_basis[symbol] == []: # if all AOs on an atom are gone, remove it
-                    del trunc_basis[symbol]
-
-            # make molecule with smaller basis set
-            mol.basis = trunc_basis
-            mol.build(dump_input=True)
+            mol.build(dump_input=True, basis=truncate_basis(mol, include))
 
             # make appropiate mean field object with new molecule
             tinit_mf = type(init_mf)(mol)

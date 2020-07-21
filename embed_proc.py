@@ -151,15 +151,9 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
             hcore_a_in_b = hcore_a_in_b[mesh]
             pure_d_a = 2 * purify(dens['a'][mesh] / 2, ovlp[mesh])
 
-            # make initial guess
-            h_eff = hcore_a_in_b + tinit_mf.get_veff(dm=pure_d_a)
-            e_mos, c_mos = tinit_mf.eig(h_eff, ovlp[mesh])
-            occ_mos = tinit_mf.get_occ(e_mos, c_mos)
-            guess_d = make_dm(c_mos[:, occ_mos > 0], occ_mos[occ_mos > 0])
-
             # truncated initial method (self embedded)
             tinit_mf.get_hcore = lambda *args: hcore_a_in_b
-            tinit_mf.kernel(guess_d)
+            tinit_mf.kernel(pure_d_a)
 
             # overwrite previous values
             dens['a'] = tinit_mf.make_rdm1()

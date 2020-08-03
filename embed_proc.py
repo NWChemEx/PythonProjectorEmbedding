@@ -82,6 +82,8 @@ def spade_partition(pyscf_mf, active_atoms=None, c_occ=None):
     if len(s_vals) == 1:
         n_act_mos = 1
     else:
+        if len(s_vals) != v_vecs.shape[0]:
+            s_vals = np.append(s_vals, [0.0])
         deltas = [-(s_vals[i + 1] - s_vals[i]) for i in range(len(s_vals)-1)]
         n_act_mos = np.argpartition(deltas, -1)[-1]+1
 

@@ -14,7 +14,7 @@ from projectorEmbedding.embed_utils import purify
 from projectorEmbedding.embed_utils import screen_aos
 from projectorEmbedding.embed_utils import truncate_basis
 
-def mulliken_partition(charge_threshold=0.4):
+def mulliken_partition(charge_threshold=0.4, localize=True):
     """splits the MOs into active and frozen parts based on charge threshold."""
     def internal(pyscf_mf, active_atoms=None, c_occ=None):
         offset_ao_by_atom = pyscf_mf.mol.offset_ao_by_atom()
@@ -23,6 +23,10 @@ def mulliken_partition(charge_threshold=0.4):
         if c_occ is None:
             c_occ = pyscf_mf.mo_coeff[:, pyscf_mf.mo_occ > 0]
         overlap = pyscf_mf.get_ovlp()
+
+        # localize orbitals
+        if internal.localize:
+            c_occ = lo.PM(pyscf_mf.mol, c_occ).kernel()
 
         # for each mo, go through active atoms and check the charge on that atom.
         # if charge on active atom is greater than threshold, mo added to active list.
@@ -55,7 +59,9 @@ def mulliken_partition(charge_threshold=0.4):
         frozen_mos = [i for i in range(c_occ.shape[1]) if i not in active_mos]
 
         return c_occ[:, active_mos], c_occ[:, frozen_mos]
+
     internal.charge_threshold = charge_threshold
+    internal.localize = localize
 
     return internal
 
@@ -93,17 +99,13 @@ def spade_partition(pyscf_mf, active_atoms=None, c_occ=None):
     return c_a, c_b
 
 def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
-                        mu_val=10**6, trunc_lambda=None, localize=True,
-                        distribute_mos=mulliken_partition(0.4)):
+                        mu_val=10**6, trunc_lambda=None,
+                        distribute_mos=mulliken_partition()):
     """Manby-like embedding procedure."""
     # initial information
     mol = init_mf.mol.copy()
     ovlp = init_mf.get_ovlp()
     c_occ = init_mf.mo_coeff[:, init_mf.mo_occ > 0]
-
-    # localize orbitals
-    if localize:
-        c_occ = lo.PM(mol, c_occ).kernel()
 
     # get active mos
     c_occ_a, _ = distribute_mos(init_mf, active_atoms=active_atoms, c_occ=c_occ)
@@ -118,9 +120,12 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     v_a = init_mf.get_veff(dm=dens['a'])
 
     # build embedding potential
-    hcore_a_in_b = init_mf.get_hcore()
-    hcore_a_in_b += init_mf.get_veff(dm=dens['ab']) - v_a
-    hcore_a_in_b += mu_val * (ovlp @ dens['b'] @ ovlp)
+    f_ab = init_mf.get_fock()
+    hcore_a_in_b = f_ab - v_a
+    hcore_a_in_b -= 0.5 * (f_ab @ dens['b'] @ ovlp + ovlp @ dens['b'] @ f_ab)
+    #hcore_a_in_b = init_mf.get_hcore()
+    #hcore_a_in_b += init_mf.get_veff(dm=dens['ab']) - v_a
+    #hcore_a_in_b += mu_val * (ovlp @ dens['b'] @ ovlp)
 
     # get electronic energy for A
     energy_a, _ = init_mf.energy_elec(dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)

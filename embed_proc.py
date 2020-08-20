@@ -116,16 +116,15 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     dens['a'] = make_dm(c_occ_a, init_mf.mo_occ[:c_occ_a.shape[1]])
     dens['b'] = dens['ab'] - dens['a']
 
-    # get subsystem A potential
-    v_a = init_mf.get_veff(dm=dens['a'])
-
     # build embedding potential
     f_ab = init_mf.get_fock()
+    v_a = init_mf.get_veff(dm=dens['a'])
+
     hcore_a_in_b = f_ab - v_a
-    hcore_a_in_b -= 0.5 * (f_ab @ dens['b'] @ ovlp + ovlp @ dens['b'] @ f_ab)
-    #hcore_a_in_b = init_mf.get_hcore()
-    #hcore_a_in_b += init_mf.get_veff(dm=dens['ab']) - v_a
-    #hcore_a_in_b += mu_val * (ovlp @ dens['b'] @ ovlp)
+    if mu_val is None:
+        hcore_a_in_b -= 0.5 * (f_ab @ dens['b'] @ ovlp + ovlp @ dens['b'] @ f_ab)
+    else:
+        hcore_a_in_b += mu_val * (ovlp @ dens['b'] @ ovlp)
 
     # get electronic energy for A
     energy_a, _ = init_mf.energy_elec(dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)

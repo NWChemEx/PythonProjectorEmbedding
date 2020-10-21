@@ -149,9 +149,14 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
             mol.build(dump_input=True, basis=truncate_basis(mol, include))
 
             # make appropiate mean field object with new molecule
-            tinit_mf = type(init_mf)(mol)
             if hasattr(init_mf, 'xc'):
+                tinit_mf = dft.RKS(mol)
                 tinit_mf.xc = init_mf.xc
+            else:
+                tinit_mf = scf.RHF(mol)
+            if hasattr(init_mf, 'with_df'):
+                tinit_mf = df.density_fit(tinit_mf)
+                tinit_mf.with_df.auxbasis = init_mf.with_df.auxbasis
 
             # make truncated tensors
             mesh = np.ix_(active_aos, active_aos)

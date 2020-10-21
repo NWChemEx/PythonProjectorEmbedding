@@ -6,6 +6,7 @@ from pyscf import dft
 from pyscf import lo
 from pyscf import mp
 from pyscf import cc
+from pyscf import df
 import numpy as np
 from scipy.linalg import fractional_matrix_power
 from projectorEmbedding.embed_utils import make_dm
@@ -172,6 +173,9 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     else: # assume anything else is a functional name
         mf_embed = dft.RKS(mol)
         mf_embed.xc = embed_meth
+    if hasattr(init_mf, 'with_df'):
+        mf_embed = density_fit(mf_embed)
+        mf_embed.with_df.auxbasis = init_mf.with_df.auxbasis
     mf_embed.get_hcore = lambda *args: hcore_a_in_b
 
     # run embedded SCF

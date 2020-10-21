@@ -174,7 +174,7 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
         mf_embed = dft.RKS(mol)
         mf_embed.xc = embed_meth
     if hasattr(init_mf, 'with_df'):
-        mf_embed = density_fit(mf_embed)
+        mf_embed = df.density_fit(mf_embed)
         mf_embed.with_df.auxbasis = init_mf.with_df.auxbasis
     mf_embed.get_hcore = lambda *args: hcore_a_in_b
 

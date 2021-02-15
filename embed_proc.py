@@ -66,6 +66,47 @@ def mulliken_partition(charge_threshold=0.4, localize=True):
 
     return internal
 
+def occupancy_partition(occupancy_threshold=0.4, localize=True):
+    """splits the MOs into active and frozen parts based on occupancy threshold."""
+    def internal(pyscf_mf, active_atoms=None, c_occ=None):
+        # Handle orbital coefficients
+        if c_occ is None:
+            c_occ = pyscf_mf.mo_coeff[:, pyscf_mf.mo_occ > 0]
+        if internal.localize:
+            c_occ = lo.PM(pyscf_mf.mol, c_occ).kernel()
+        overlap = pyscf_mf.get_ovlp()
+
+        # Handle active atoms
+        if active_atoms == []: # default case for NO active atoms
+            return c_occ[:, []], c_occ[:, :]
+        if active_atoms is None:
+            return c_occ[:, :], c_occ[:, []]
+
+        # Find AOs on active atoms
+        offset_ao_by_atom = pyscf_mf.mol.offset_ao_by_atom()
+        active_aos = []
+        for atom in active_atoms:
+            active_aos += list(range(offset_ao_by_atom[atom, 2], offset_ao_by_atom[atom, 3]))
+        mesh = np.ix_(active_aos, active_aos)
+
+        # Find MO occupancies in active AOs and sort accordingly
+        active_mos = []
+        frozen_mos = []
+        for mo_i in range(c_occ.shape[1]):
+            rdm_mo = make_dm(c_occ[:, [mo_i]], 1)
+            dm_mo = rdm_mo @ overlap
+            if np.trace(dm_mo[mesh]) > internal.occupancy_threshold:
+                active_mos.append(mo_i)
+            else:
+                frozen_mos.append(mo_i)
+
+        return c_occ[:, active_mos], c_occ[:, frozen_mos]
+
+    internal.occupancy_threshold = occupancy_threshold
+    internal.localize = localize
+
+    return internal
+
 def spade_partition(pyscf_mf, active_atoms=None, c_occ=None):
     """SPADE partitioning scheme"""
 

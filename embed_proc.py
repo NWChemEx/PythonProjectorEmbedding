@@ -107,7 +107,7 @@ def occupancy_partition(occupancy_threshold=0.4, localize=True):
 
     return internal
 
-def spade_partition(pyscf_mf, active_atoms=None, c_occ=None):
+def spade_partition(pyscf_mf, active_atoms=None, c_occ=None, n_act_mos=None):
     """SPADE partitioning scheme"""
 
     # things coming from molecule.
@@ -130,10 +130,11 @@ def spade_partition(pyscf_mf, active_atoms=None, c_occ=None):
     if len(s_vals) == 1:
         n_act_mos = 1
     else:
-        if len(s_vals) != v_vecs.shape[0]:
-            s_vals = np.append(s_vals, [0.0])
-        deltas = [-(s_vals[i + 1] - s_vals[i]) for i in range(len(s_vals)-1)]
-        n_act_mos = np.argpartition(deltas, -1)[-1]+1
+        if not n_act_mos:
+            if len(s_vals) != v_vecs.shape[0]:
+                s_vals = np.append(s_vals, [0.0])
+            deltas = [-(s_vals[i + 1] - s_vals[i]) for i in range(len(s_vals)-1)]
+            n_act_mos = np.argpartition(deltas, -1)[-1]+1
 
     c_a = c_occ @ v_vecs.T[:, :n_act_mos]
     c_b = c_occ @ v_vecs.T[:, n_act_mos:]
@@ -144,6 +145,7 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
                         mu_val=10**6, trunc_lambda=None,
                         distribute_mos=mulliken_partition()):
     """Manby-like embedding procedure."""
+    print("Start Projector Embedding")
     # initial information
     mol = init_mf.mol.copy()
     ovlp = init_mf.get_ovlp()
@@ -151,6 +153,7 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
 
     # get active mos
     c_occ_a, _ = distribute_mos(init_mf, active_atoms=active_atoms, c_occ=c_occ)
+    print(f"Number of active MOs: {c_occ_a.shape[1]}")
 
     # make full and subsystem densities
     dens = {}
@@ -212,6 +215,10 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
             dens['a'] = tinit_mf.make_rdm1()
             v_a = tinit_mf.get_veff(dm=dens['a'])
             energy_a, _ = tinit_mf.energy_elec(dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
+        else:
+            print("No AOs truncated")
+
+    print("Calculating A-in-B")
 
     # make embedding mean field object
     if embed_meth.lower() in ['rhf', 'mp2', 'ccsd', 'ccsd(t)']:
@@ -247,4 +254,5 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
         if embed_meth.lower() == 'ccsd(t)':
             results = results + (embed_corr.ccsd_t(),)
 
+    print("Projector Embedding Complete")
     return results

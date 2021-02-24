@@ -167,7 +167,8 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
 
     hcore_a_in_b = f_ab - v_a
     if mu_val is None:
-        hcore_a_in_b -= 0.5 * (f_ab @ dens['b'] @ ovlp + ovlp @ dens['b'] @ f_ab)
+        matrix_sum = f_ab @ dens['b'] @ ovlp
+        hcore_a_in_b -= 0.5 * (matrix_sum + matrix_sum.T)
     else:
         hcore_a_in_b += mu_val * (ovlp @ dens['b'] @ ovlp)
 

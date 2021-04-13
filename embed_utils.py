@@ -2,6 +2,7 @@
 Some utility functions
 """
 from copy import deepcopy
+
 import numpy as np
 
 def make_dm(coeffs, occupency):
@@ -35,6 +36,26 @@ def flatten_basis(mol):
                         atom_basis[i] = new_contraction
 
     return flatten_set
+
+def screen_aos(mol, active_atoms, den_mat_a, ovlp, trunc_lambda):
+    """Screen AOs for truncation"""
+    include = [False] * mol.nbas
+    active_aos = []
+
+    for shell in range(mol.nbas):
+        aos_in_shell = list(range(mol.ao_loc[shell], mol.ao_loc[shell + 1]))
+
+        if mol.bas_atom(shell) not in active_atoms: # shells on active atoms are always kept
+            for ao_i in aos_in_shell:
+                if (den_mat_a[ao_i, ao_i] * ovlp[ao_i, ao_i]) > trunc_lambda:
+                    break
+            else: # if nothing trips the break, these AOs aren't kept and we move on
+                continue
+
+        include[shell] = True
+        active_aos += aos_in_shell
+
+    return active_aos, include
 
 def truncate_basis(mol, mask):
     """Truncate the molecule basis set according to the shell mask"""
@@ -77,23 +98,3 @@ def purify(matrix, overlap, rtol=1e-5, atol=1e-8, max_iter=15):
         print("Max Iterations hit")
 
     return matrix
-
-def screen_aos(mol, active_atoms, den_mat_a, ovlp, trunc_lambda):
-    """Screen AOs for truncation"""
-    include = [False] * mol.nbas
-    active_aos = []
-
-    for shell in range(mol.nbas):
-        aos_in_shell = list(range(mol.ao_loc[shell], mol.ao_loc[shell + 1]))
-
-        if mol.bas_atom(shell) not in active_atoms: # shells on active atoms are always kept
-            for ao_i in aos_in_shell:
-                if (den_mat_a[ao_i, ao_i] * ovlp[ao_i, ao_i]) > trunc_lambda:
-                    break
-            else: # if nothing trips the break, these AOs aren't kept and we move on
-                continue
-
-        include[shell] = True
-        active_aos += aos_in_shell
-
-    return active_aos, include

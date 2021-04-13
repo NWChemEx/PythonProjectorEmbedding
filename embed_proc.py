@@ -210,7 +210,10 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
 
             # truncated initial method (self embedded)
             tinit_mf.get_hcore = lambda *args: hcore_a_in_b
-            tinit_mf.kernel(pure_d_a)
+            if np.isnan(pure_d_a).any():
+                tinit_mf.kernel(dens['a'][mesh])
+            else:
+                tinit_mf.kernel(pure_d_a)
 
             # overwrite previous values
             dens['a'] = tinit_mf.make_rdm1()
@@ -257,3 +260,4 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
 
     print("Projector Embedding Complete")
     return results
+

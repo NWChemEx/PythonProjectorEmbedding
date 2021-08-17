@@ -5,9 +5,19 @@ from copy import deepcopy
 
 import numpy as np
 
-def make_dm(coeffs, occupency):
-    """Given MO coefficients and occupencies, return the density matrix"""
-    return np.dot(coeffs * occupency, coeffs.T.conj())
+def get_occ_coeffs(coefficients, occupancies):
+    if len(coefficients.shape) == 3:
+        alpha_coeffs = get_occ_coeffs(coefficients[0], occupancies[0])
+        beta_coeffs = get_occ_coeffs(coefficients[1], occupancies[1])
+        return (alpha_coeffs, beta_coeffs)
+    return coefficients[:, occupancies > 0]
+
+def get_mo_occ_a(c_occ_a, mo_occ):
+    if len(mo_occ.shape) == 2:
+        mo_occ_alpha = get_mo_occ_a(c_occ_a[0], mo_occ[0])
+        mo_occ_beta = get_mo_occ_a(c_occ_a[1], mo_occ[1])
+        return (mo_occ_alpha, mo_occ_beta)
+    return mo_occ[..., mo_occ > 0][..., -c_occ_a.shape[1]:]
 
 def flatten_basis(mol):
     """Flattens out PySCF's basis set representation"""

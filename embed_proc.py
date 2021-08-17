@@ -9,12 +9,14 @@ from pyscf import mp
 from pyscf import cc
 from pyscf import df
 
-from projectorEmbedding.embed_utils import make_dm
+from projectorEmbedding.embed_utils import get_occ_coeffs
+from projectorEmbedding.embed_utils import get_mo_occ_a
 from projectorEmbedding.embed_utils import flatten_basis
 from projectorEmbedding.embed_utils import purify
 from projectorEmbedding.embed_utils import screen_aos
 from projectorEmbedding.embed_utils import truncate_basis
 from projectorEmbedding.embed_partition import mulliken_partition as pmm
+from projectorEmbedding.embed_pyscf_replacements import energy_elec
 
 def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
                         mu_val=10**6, trunc_lambda=None,
@@ -38,16 +40,21 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     # initial information
     mol = init_mf.mol.copy()
     ovlp = init_mf.get_ovlp()
-    c_occ = init_mf.mo_coeff[:, init_mf.mo_occ > 0]
+    c_occ = get_occ_coeffs(init_mf.mo_coeff, init_mf.mo_occ)
 
     # get active mos
     c_occ_a, _ = distribute_mos(init_mf, active_atoms=active_atoms, c_occ=c_occ)
-    print(f"Number of active MOs: {c_occ_a.shape[1]}")
+    if isinstance(c_occ_a, tuple): 
+        print(f"Number of active MOs: {c_occ_a[0].shape[1]}, {c_occ_a[1].shape[1]}")
+    else:
+        print(f"Number of active MOs: {c_occ_a.shape[1]}")
 
     # make full and subsystem densities
+    mo_occ_active = get_mo_occ_a(c_occ_a, init_mf.mo_occ)
+
     dens = {}
-    dens['ab'] = make_dm(c_occ, init_mf.mo_occ[init_mf.mo_occ > 0])
-    dens['a'] = make_dm(c_occ_a, init_mf.mo_occ[:c_occ_a.shape[1]])
+    dens['ab'] = init_mf.make_rdm1()
+    dens['a'] = init_mf.make_rdm1(c_occ_a, mo_occ_active)
     dens['b'] = dens['ab'] - dens['a']
 
     # build embedding potential
@@ -57,16 +64,20 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     if mu_val is None:
         # Huzinaga Projection
         matrix_sum = f_ab @ dens['b'] @ ovlp
-        hcore_a_in_b -= 0.5 * (matrix_sum + matrix_sum.T)
+        hcore_a_in_b -= 0.5 * (matrix_sum + matrix_sum.swapaxes(-1, -2))
     else:
         # Level-shift projection
         hcore_a_in_b += mu_val * (ovlp @ dens['b'] @ ovlp)
 
     # get electronic energy for A
-    energy_a, _ = init_mf.energy_elec(dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
+    energy_a, _ = energy_elec(init_mf, dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
+#    energy_a, _ = init_mf.energy_elec(dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
 
     # set new number of electrons
-    mol.nelectron = int(sum(init_mf.mo_occ[:c_occ_a.shape[1]]))
+    if len(mo_occ_active) == 2:
+        mol.nelectron = int(sum(mo_occ_active[0]) + sum(mo_occ_active[1]))
+    else:
+        mol.nelectron = int(sum(mo_occ_active))
 
     if trunc_lambda:
         # AO truncation
@@ -110,22 +121,33 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
             # overwrite previous values
             dens['a'] = tinit_mf.make_rdm1()
             v_a = tinit_mf.get_veff(dm=dens['a'])
-            energy_a, _ = tinit_mf.energy_elec(dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
+            energy_a, _ = energy_elec(init_mf, dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
+#            energy_a, _ = tinit_mf.energy_elec(dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
         else:
             print("No AOs truncated")
 
     print("Calculating A-in-B")
 
     # make embedding mean field object
-    if embed_meth.lower() in ['rhf', 'mp2', 'ccsd', 'ccsd(t)']:
+    embed_meth = embed_meth.lower()
+    if embed_meth in ['rhf', 'mp2', 'ccsd', 'ccsd(t)']:
         mf_embed = scf.RHF(mol)
-    else: # assume anything else is a functional name
+    elif embed_meth in ['uhf', 'ump2', 'uccsd', 'uccsd(t)']:
+        mf_embed = scf.UHF(mol)
+    elif "rks" in embed_meth:
+        mf_embed = dft.RKS(mol)
+        mf_embed.xc = embed_meth.replace("rks-", "")
+    elif "uks" in embed_meth:
+        mf_embed = dft.UKS(mol)
+        mf_embed.xc = embed_meth.replace("uks-", "")
+    else: # assume anything else is just a functional name
         mf_embed = dft.RKS(mol)
         mf_embed.xc = embed_meth
     if hasattr(init_mf, 'with_df'):
         mf_embed = df.density_fit(mf_embed)
         mf_embed.with_df.auxbasis = init_mf.with_df.auxbasis
     mf_embed.get_hcore = lambda *args: hcore_a_in_b
+    mf_embed.energy_elec = energy_elec.__get__(mf_embed, type(mf_embed))
 
     # run embedded SCF
     tot_energy_a_in_b = mf_embed.kernel(dens['a'])
@@ -137,16 +159,16 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     results = (init_mf.e_tot - energy_a + energy_a_in_b, )
 
     # correlated WF methods
-    if embed_meth.lower() == 'mp2':
+    if embed_meth.lower() in ['mp2', 'ump2']:
         embed_corr = mp.MP2(mf_embed)
         embed_corr.kernel()
         results = results + (embed_corr.e_corr,)
-    elif embed_meth.lower() in ['ccsd', 'ccsd(t)']:
+    elif embed_meth.lower() in ['ccsd', 'ccsd(t)', 'uccsd', 'uccsd(t)']:
         embed_corr = cc.CCSD(mf_embed)
         embed_corr.kernel()
         results = results + (embed_corr.emp2,)
         results = results + (embed_corr.e_corr - embed_corr.emp2,)
-        if embed_meth.lower() == 'ccsd(t)':
+        if embed_meth.lower() in ['ccsd(t)', 'uccsd(t)']:
             results = results + (embed_corr.ccsd_t(),)
 
     print("Projector Embedding Complete")

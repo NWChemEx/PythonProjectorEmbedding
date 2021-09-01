@@ -1,6 +1,5 @@
 import numpy as np
-from pyscf.lib import logger
-from pyscf.lib import NPArrayWithTag
+from pyscf.lib import logger, NPArrayWithTag
 
 def energy_elec(mf, dm=None, h1e=None, vhf=None):
     if dm is None: dm = mf.make_rdm1()

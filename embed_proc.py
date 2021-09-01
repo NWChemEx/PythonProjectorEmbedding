@@ -2,13 +2,7 @@
 Perform projector based embedding
 """
 import numpy as np
-
-from pyscf import scf
-from pyscf import dft
-from pyscf import mp
-from pyscf import cc
-from pyscf import df
-
+from pyscf import scf, dft, mp, cc, df
 from projectorEmbedding.embed_utils import get_occ_coeffs
 from projectorEmbedding.embed_utils import get_mo_occ_a
 from projectorEmbedding.embed_utils import flatten_basis
@@ -130,9 +124,9 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
 
     # make embedding mean field object
     embed_meth = embed_meth.lower()
-    if embed_meth in ['rhf', 'mp2', 'ccsd', 'ccsd(t)']:
+    if embed_meth in ('rhf', 'mp2', 'ccsd', 'ccsd(t)'):
         mf_embed = scf.RHF(mol)
-    elif embed_meth in ['uhf', 'ump2', 'uccsd', 'uccsd(t)']:
+    elif embed_meth in ('uhf', 'ump2', 'uccsd', 'uccsd(t)'):
         mf_embed = scf.UHF(mol)
     elif "rks" in embed_meth:
         mf_embed = dft.RKS(mol)
@@ -159,16 +153,16 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     results = (init_mf.e_tot - energy_a + energy_a_in_b, )
 
     # correlated WF methods
-    if embed_meth.lower() in ['mp2', 'ump2']:
+    if embed_meth.lower() in ('mp2', 'ump2'):
         embed_corr = mp.MP2(mf_embed)
         embed_corr.kernel()
         results = results + (embed_corr.e_corr,)
-    elif embed_meth.lower() in ['ccsd', 'ccsd(t)', 'uccsd', 'uccsd(t)']:
+    elif embed_meth.lower() in ('ccsd', 'ccsd(t)', 'uccsd', 'uccsd(t)'):
         embed_corr = cc.CCSD(mf_embed)
         embed_corr.kernel()
         results = results + (embed_corr.emp2,)
         results = results + (embed_corr.e_corr - embed_corr.emp2,)
-        if embed_meth.lower() in ['ccsd(t)', 'uccsd(t)']:
+        if embed_meth.lower() in ('ccsd(t)', 'uccsd(t)'):
             results = results + (embed_corr.ccsd_t(),)
 
     print("Projector Embedding Complete")

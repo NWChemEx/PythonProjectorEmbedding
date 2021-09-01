@@ -2,7 +2,6 @@
 Some utility functions
 """
 from copy import deepcopy
-
 import numpy as np
 
 def get_occ_coeffs(coefficients, occupancies):

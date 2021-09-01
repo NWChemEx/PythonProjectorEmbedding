@@ -2,11 +2,8 @@
 Functions to partition the density
 """
 import numpy as np
-
-from scipy.linalg import fractional_matrix_power
-
 from pyscf import lo
-
+from scipy.linalg import fractional_matrix_power
 from projectorEmbedding.embed_utils import get_occ_coeffs
 
 def mulliken_partition(charge_threshold=0.4, localize=True):

@@ -65,7 +65,6 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
 
     # get electronic energy for A
     energy_a, _ = energy_elec(init_mf, dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
-#    energy_a, _ = init_mf.energy_elec(dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
 
     # set new number of electrons
     if len(mo_occ_active) == 2:
@@ -106,6 +105,7 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
 
             # truncated initial method (self embedded)
             tinit_mf.get_hcore = lambda *args: hcore_a_in_b
+            tinit_mf.energy_elec = energy_elec.__get__(tinit_mf, type(tinit_mf))
             if np.isnan(pure_d_a).any():
                 # Failsafe on purify
                 tinit_mf.kernel(dens['a'][mesh])
@@ -116,7 +116,6 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
             dens['a'] = tinit_mf.make_rdm1()
             v_a = tinit_mf.get_veff(dm=dens['a'])
             energy_a, _ = energy_elec(init_mf, dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
-#            energy_a, _ = tinit_mf.energy_elec(dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
         else:
             print("No AOs truncated")
 

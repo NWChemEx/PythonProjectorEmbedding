@@ -2,6 +2,7 @@
 Perform projector based embedding
 """
 import numpy as np
+from numpy.lib.arraysetops import isin
 from pyscf import scf, dft, mp, cc, df
 from projectorEmbedding.embed_utils import get_occ_coeffs
 from projectorEmbedding.embed_utils import get_mo_occ_a
@@ -19,10 +20,14 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     Manby-like embedding procedure.
 
     Parameters:
-        init_mf:        Full system background calculation. Either an SCF or DFT object from PySCF.
+        init_mf:        Full system background calculation. 
+                        Must be a HF or DFT object.
+                        Restricted open-shell not supported.
         active_atoms:   List of atom numbers specifying active atoms.
         embed_meth:     String specifying embedded level of theory.
-                        Can be "RHF", "MP2", "CCSD", "CCSD(T)", or a density functional.
+                        Can be "HF", "MP2", "CCSD", "CCSD(T)", or a density functional.
+                        Prepend "U" to WFT methods to specify unresticted for closed-shelled systems.
+                        Prepend "UKS-" to DFT methods for the same.
         mu_val:         Value of level-shift. Uses Huzinaga projection if set to None.
         trunc_lambda:   Float charge threshold for AO truncation screening.
         distribute_mos: Function used to partition the density.
@@ -31,6 +36,16 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
         results: A tuple containing the total embedded energy.
     """
     print("Start Projector Embedding")
+
+    # restricted open-shell not supported
+    if isinstance(init_mf, scf.rohf.ROHF) or isinstance(init_mf, dft.roks.ROKS):
+        raise RuntimeError('Restricted open-shell methods not supported')
+
+    # wavefunction method options
+    general_options = ('hf', 'mp2', 'ccsd', 'ccsd(t)')
+    unrestricted = tuple('u' + opt for opt in general_options)
+    embed_meth = embed_meth.lower()
+
     # initial information
     mol = init_mf.mol.copy()
     ovlp = init_mf.get_ovlp()
@@ -43,9 +58,10 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     else:
         print(f"Number of active MOs: {c_occ_a.shape[1]}")
 
-    # make full and subsystem densities
+    # get active occupancies
     mo_occ_active = get_mo_occ_a(c_occ_a, init_mf.mo_occ)
 
+    # make full and subsystem densities
     dens = {}
     dens['ab'] = init_mf.make_rdm1()
     dens['a'] = init_mf.make_rdm1(c_occ_a, mo_occ_active)
@@ -71,6 +87,7 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
         mol.nelectron = int(sum(mo_occ_active[0]) + sum(mo_occ_active[1]))
     else:
         mol.nelectron = int(sum(mo_occ_active))
+    system_open_shelled = mol.nelectron % 2 != 0
 
     if trunc_lambda:
         # AO truncation
@@ -122,19 +139,19 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     print("Calculating A-in-B")
 
     # make embedding mean field object
-    embed_meth = embed_meth.lower()
-    if embed_meth in ('rhf', 'mp2', 'ccsd', 'ccsd(t)'):
-        mf_embed = scf.RHF(mol)
-    elif embed_meth in ('uhf', 'ump2', 'uccsd', 'uccsd(t)'):
-        mf_embed = scf.UHF(mol)
-    elif "rks" in embed_meth:
-        mf_embed = dft.RKS(mol)
-        mf_embed.xc = embed_meth.replace("rks-", "")
-    elif "uks" in embed_meth:
-        mf_embed = dft.UKS(mol)
-        mf_embed.xc = embed_meth.replace("uks-", "")
+    if embed_meth in general_options + unrestricted:
+        if system_open_shelled or embed_meth in unrestricted:
+            mf_embed = scf.UHF(mol)
+        else:
+            mf_embed = scf.RHF(mol)
     else: # assume anything else is just a functional name
-        mf_embed = dft.RKS(mol)
+        if "uks-" in embed_meth: # deal with soecification of unrestricted
+            embed_meth = embed_meth.replace("uks-", "")
+            system_open_shelled = True
+        if system_open_shelled:
+            mf_embed = dft.UKS(mol)
+        else:
+            mf_embed = dft.RKS(mol)
         mf_embed.xc = embed_meth
     if hasattr(init_mf, 'with_df'):
         mf_embed = df.density_fit(mf_embed)
@@ -152,16 +169,16 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     results = (init_mf.e_tot - energy_a + energy_a_in_b, )
 
     # correlated WF methods
-    if embed_meth.lower() in ('mp2', 'ump2'):
+    if 'mp2' in embed_meth:
         embed_corr = mp.MP2(mf_embed)
         embed_corr.kernel()
         results = results + (embed_corr.e_corr,)
-    elif embed_meth.lower() in ('ccsd', 'ccsd(t)', 'uccsd', 'uccsd(t)'):
+    elif 'ccsd' in embed_meth or 'ccsd(t)' in embed_meth:
         embed_corr = cc.CCSD(mf_embed)
         embed_corr.kernel()
         results = results + (embed_corr.emp2,)
         results = results + (embed_corr.e_corr - embed_corr.emp2,)
-        if embed_meth.lower() in ('ccsd(t)', 'uccsd(t)'):
+        if 'ccsd(t)' in embed_meth:
             results = results + (embed_corr.ccsd_t(),)
 
     print("Projector Embedding Complete")

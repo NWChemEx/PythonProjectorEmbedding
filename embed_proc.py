@@ -41,10 +41,8 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     if isinstance(init_mf, scf.rohf.ROHF) or isinstance(init_mf, dft.roks.ROKS):
         raise RuntimeError('Restricted open-shell methods not supported')
 
-    # wavefunction method options
-    general_options = ('hf', 'mp2', 'ccsd', 'ccsd(t)')
-    unrestricted = tuple('u' + opt for opt in general_options)
-    embed_meth = embed_meth.lower()
+    # unresticted or restricted initial method
+    init_is_unrestricted = isinstance(init_mf, scf.uhf.UHF) or isinstance(init_mf, dft.uks.UKS)
 
     # initial information
     mol = init_mf.mol.copy()
@@ -53,7 +51,7 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
 
     # get active mos
     c_occ_a, _ = distribute_mos(init_mf, active_atoms=active_atoms, c_occ=c_occ)
-    if isinstance(c_occ_a, tuple): 
+    if init_is_unrestricted: 
         print(f"Number of active MOs: {c_occ_a[0].shape[1]}, {c_occ_a[1].shape[1]}")
     else:
         print(f"Number of active MOs: {c_occ_a.shape[1]}")
@@ -83,11 +81,10 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     energy_a, _ = energy_elec(init_mf, dm=dens['a'], vhf=v_a, h1e=hcore_a_in_b)
 
     # set new number of electrons
-    if len(mo_occ_active) == 2:
+    if init_is_unrestricted:
         mol.nelectron = int(sum(mo_occ_active[0]) + sum(mo_occ_active[1]))
     else:
         mol.nelectron = int(sum(mo_occ_active))
-    system_open_shelled = mol.nelectron % 2 != 0
 
     if trunc_lambda:
         # AO truncation
@@ -138,17 +135,22 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
 
     print("Calculating A-in-B")
 
+    # wavefunction method options
+    general_options = ('hf', 'mp2', 'ccsd', 'ccsd(t)')
+    unrestricted = tuple('u' + opt for opt in general_options)
+    embed_meth = embed_meth.lower()
+
     # make embedding mean field object
     if embed_meth in general_options + unrestricted:
-        if system_open_shelled or embed_meth in unrestricted:
+        if init_is_unrestricted or embed_meth in unrestricted:
             mf_embed = scf.UHF(mol)
         else:
             mf_embed = scf.RHF(mol)
     else: # assume anything else is just a functional name
-        if "uks-" in embed_meth: # deal with soecification of unrestricted
+        if "uks-" in embed_meth: # deal with specification of unrestricted
             embed_meth = embed_meth.replace("uks-", "")
-            system_open_shelled = True
-        if system_open_shelled:
+            init_is_unrestricted = True
+        if init_is_unrestricted:
             mf_embed = dft.UKS(mol)
         else:
             mf_embed = dft.RKS(mol)

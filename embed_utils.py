@@ -5,7 +5,7 @@ from copy import deepcopy
 import numpy as np
 
 def get_occ_coeffs(coefficients, occupancies):
-    if len(coefficients.shape) == 3:
+    if coefficients.ndim == 3:
         alpha_coeffs = get_occ_coeffs(coefficients[0], occupancies[0])
         beta_coeffs = get_occ_coeffs(coefficients[1], occupancies[1])
         return (alpha_coeffs, beta_coeffs)
@@ -56,7 +56,13 @@ def screen_aos(mol, active_atoms, den_mat_a, ovlp, trunc_lambda):
 
         if mol.bas_atom(shell) not in active_atoms: # shells on active atoms are always kept
             for ao_i in aos_in_shell:
-                if (den_mat_a[ao_i, ao_i] * ovlp[ao_i, ao_i]) > trunc_lambda:
+                if den_mat_a.ndim == 3:
+                    charge = den_mat_a[0, ao_i, ao_i] * ovlp[ao_i, ao_i]
+                    charge += den_mat_a[1, ao_i, ao_i] * ovlp[ao_i, ao_i]
+                else:
+                    charge = den_mat_a[ao_i, ao_i] * ovlp[ao_i, ao_i]
+
+                if charge > trunc_lambda:
                     break
             else: # if nothing trips the break, these AOs aren't kept and we move on
                 continue

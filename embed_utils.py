@@ -58,12 +58,12 @@ def screen_aos(mol, active_atoms, den_mat_a, ovlp, trunc_lambda):
             for ao_i in aos_in_shell:
                 if den_mat_a.ndim == 3:
                     charge = den_mat_a[0, ao_i, ao_i] * ovlp[ao_i, ao_i]
-                    charge += den_mat_a[1, ao_i, ao_i] * ovlp[ao_i, ao_i]
+                    if charge > (trunc_lambda / 2): break
+                    charge = den_mat_a[1, ao_i, ao_i] * ovlp[ao_i, ao_i]
+                    if charge > (trunc_lambda / 2): break
                 else:
                     charge = den_mat_a[ao_i, ao_i] * ovlp[ao_i, ao_i]
-
-                if charge > trunc_lambda:
-                    break
+                    if charge > trunc_lambda: break
             else: # if nothing trips the break, these AOs aren't kept and we move on
                 continue
 
@@ -93,6 +93,12 @@ def truncate_basis(mol, mask):
 def purify(matrix, overlap, rtol=1e-5, atol=1e-8, max_iter=15):
     """McWeeny Purification of Density Matrix"""
     print('Begin Purification')
+
+    if matrix.ndim == 3:
+        matrix_alpha = purify(matrix[0], overlap, rtol, atol, max_iter)
+        matrix_beta = purify(matrix[1], overlap, rtol, atol, max_iter)
+        return np.array((matrix_alpha, matrix_beta))
+
     i = 0
     density = matrix @ overlap
 
@@ -110,6 +116,6 @@ def purify(matrix, overlap, rtol=1e-5, atol=1e-8, max_iter=15):
     if i < max_iter:
         print('Purification Completed\n')
     else:
-        print("Max Iterations hit")
+        print("Max Iterations hit\n")
 
     return matrix

@@ -50,6 +50,7 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     c_occ = get_occ_coeffs(init_mf.mo_coeff, init_mf.mo_occ)
 
     # get active mos
+    print("Partitioning MOs")
     c_occ_a, _ = distribute_mos(init_mf, active_atoms=active_atoms, c_occ=c_occ)
     if init_is_unrestricted: 
         print(f"Number of active MOs: {c_occ_a[0].shape[1]}, {c_occ_a[1].shape[1]}")
@@ -72,7 +73,8 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     if mu_val is None:
         # Huzinaga Projection
         matrix_sum = f_ab @ dens['b'] @ ovlp
-        hcore_a_in_b -= 0.5 * (matrix_sum + matrix_sum.swapaxes(-1, -2))
+        coeff = 1.0 if dens['b'].ndim == 3 else 0.5
+        hcore_a_in_b -= coeff * (matrix_sum + matrix_sum.swapaxes(-1, -2))
     else:
         # Level-shift projection
         hcore_a_in_b += mu_val * (ovlp @ dens['b'] @ ovlp)
@@ -104,25 +106,29 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
 
             # make appropiate mean field object with new molecule
             if hasattr(init_mf, 'xc'):
-                tinit_mf = dft.RKS(mol)
+                tinit_mf = dft.UKS(mol) if init_is_unrestricted else dft.RKS(mol)
                 tinit_mf.xc = init_mf.xc
             else:
-                tinit_mf = scf.RHF(mol)
+                tinit_mf = dft.UHF(mol) if init_is_unrestricted else scf.RHF(mol)
             if hasattr(init_mf, 'with_df'):
                 tinit_mf = df.density_fit(tinit_mf)
                 tinit_mf.with_df.auxbasis = init_mf.with_df.auxbasis
 
             # make truncated tensors
-            mesh = np.ix_(active_aos, active_aos)
-            hcore_a_in_b = hcore_a_in_b[mesh]
-            pure_d_a = 2 * purify(dens['a'][mesh] / 2, ovlp[mesh])
+            mesh3d = np.ix_([0, 1], active_aos, active_aos)
+            mesh2d = np.ix_(active_aos, active_aos)
+            masked = lambda mat: mat[mesh3d] if mat.ndim == 3 else mat[mesh2d]
+
+            hcore_a_in_b = masked(hcore_a_in_b)
+            factor = 1 if init_is_unrestricted else 2
+            pure_d_a = factor * purify(masked(dens['a']) / factor, masked(ovlp))
 
             # truncated initial method (self embedded)
             tinit_mf.get_hcore = lambda *args: hcore_a_in_b
             tinit_mf.energy_elec = energy_elec.__get__(tinit_mf, type(tinit_mf))
             if np.isnan(pure_d_a).any():
                 # Failsafe on purify
-                tinit_mf.kernel(dens['a'][mesh])
+                tinit_mf.kernel(masked(dens['a']))
             else:
                 tinit_mf.kernel(pure_d_a)
 

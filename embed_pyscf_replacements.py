@@ -28,13 +28,13 @@ def energy_elec(mf, dm=None, h1e=None, vhf=None):
         mf.scf_summary['e1'] = e1.real
         mf.scf_summary['coul'] = vhf.ecoul.real
         mf.scf_summary['exc'] = vhf.exc.real
-        logger.debug(mf, 'E1 = %s  Ecoul = %s  Exc = %s', e1, vhf.ecoul, vhf.exc)
+        logger.debug(mf, 'PATCHED E1 = %s  Ecoul = %s  Exc = %s', e1, vhf.ecoul, vhf.exc)
     else:
         e2 = _check_dims_then_einsum(vhf, dm) * 0.5
 
         mf.scf_summary['e1'] = e1.real
         mf.scf_summary['e2'] = e2.real
-        logger.debug(mf, 'E1 = %s  Ecoul = %s', e1, e2.real)
+        logger.debug(mf, 'PATCHED E1 = %s  Ecoul = %s', e1, e2.real)
 
     return (e1+e2).real, e2
 

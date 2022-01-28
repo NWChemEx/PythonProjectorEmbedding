@@ -2,6 +2,8 @@
 Functions to partition the density
 """
 import numpy as np
+from math import ceil
+from math import floor
 from pyscf import lo
 from scipy.linalg import fractional_matrix_power
 from projectorEmbedding.embed_utils import get_occ_coeffs
@@ -117,8 +119,12 @@ def spade_partition(pyscf_mf, active_atoms=None, c_occ=None, n_act_mos=None):
         c_occ = get_occ_coeffs(pyscf_mf.mo_coeff, pyscf_mf.mo_occ)
 
     if isinstance(c_occ, tuple):
-        alpha_active, alpha_inactive = spade_partition(pyscf_mf, active_atoms, c_occ=c_occ[0])
-        beta_active, beta_inactive = spade_partition(pyscf_mf, active_atoms, c_occ=c_occ[1])
+        if n_act_mos is None:
+            n_act_mos_a = n_act_mos_b = None
+        else:
+            n_act_mos_a, n_act_mos_b = n_act_mos
+        alpha_active, alpha_inactive = spade_partition(pyscf_mf, active_atoms, c_occ=c_occ[0], n_act_mos=n_act_mos_a)
+        beta_active, beta_inactive = spade_partition(pyscf_mf, active_atoms, c_occ=c_occ[1], n_act_mos=n_act_mos_b)
         return (alpha_active, beta_active), (alpha_inactive, beta_inactive)
 
     offset_ao_by_atom = pyscf_mf.mol.offset_ao_by_atom()

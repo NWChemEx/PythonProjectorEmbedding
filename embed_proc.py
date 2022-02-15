@@ -182,6 +182,8 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
         embed_corr.kernel()
         results = results + (embed_corr.e_corr,)
     elif 'ccsd' in embed_meth or 'ccsd(t)' in embed_meth:
+        if init_is_unrestricted: # DF-UCCSD not supported by PySCF at this time
+            mf_embed.with_df = None
         embed_corr = cc.CCSD(mf_embed)
         embed_corr.kernel()
         results = results + (embed_corr.emp2,)

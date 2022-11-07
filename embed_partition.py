@@ -155,3 +155,67 @@ def spade_partition(pyscf_mf, active_atoms=None, c_occ=None, n_act_mos=None):
     c_b = c_occ @ v_vecs.T[:, n_act_mos:]
 
     return c_a, c_b
+
+def single_atom_mulliken_partition(pyscf_mf, active_atoms=None, c_occ=None, 
+                                   n_act_mos=None, localize=True):
+    # if occupied coeffs aren't provided, get the ones from the mean field results.
+    if len(active_atoms) > 1:
+        raise Exception(
+            "This partition isn't intended for more than one active atom."
+            )
+
+    if c_occ is None:
+        c_occ = get_occ_coeffs(pyscf_mf.mo_coeff, pyscf_mf.mo_occ)
+
+    if isinstance(c_occ, tuple):
+        n_act_mos_a, n_act_mos_b = n_act_mos
+        alpha_active, alpha_inactive = single_atom_mulliken_partition(pyscf_mf, 
+                                                active_atoms, 
+                                                c_occ=c_occ[0],
+                                                n_act_mos=n_act_mos_a)
+        beta_active, beta_inactive = single_atom_mulliken_partition(pyscf_mf, 
+                                                active_atoms, 
+                                                c_occ=c_occ[1],
+                                                n_act_mos=n_act_mos_b)
+        return (alpha_active, beta_active), (alpha_inactive, beta_inactive)
+
+    mo_occ = pyscf_mf.mo_occ
+    if len(mo_occ) == 2:
+        mo_occ = mo_occ[0]
+
+    offset_ao_by_atom = pyscf_mf.mol.offset_ao_by_atom()
+    overlap = pyscf_mf.get_ovlp()
+
+    # localize orbitals
+    if localize:
+        c_occ = lo.PM(pyscf_mf.mol, c_occ).kernel()
+
+    # for each mo, go through active atoms and check the charge on that atom.
+    # if charge on active atom is greater than threshold, mo added to active list.
+    if active_atoms == []: # default case for NO active atoms
+        return c_occ[:, []], c_occ[:, :]
+    if active_atoms is None:
+        return c_occ[:, :], c_occ[:, []]
+
+    charges = []
+    for mo_i in range(c_occ.shape[1]):
+
+        rdm_mo = np.dot(c_occ[:, [mo_i]] * mo_occ[mo_i], c_occ[:, [mo_i]].conj().T)
+
+        atom = active_atoms[0]
+        offset = offset_ao_by_atom[atom, 2]
+        extent = offset_ao_by_atom[atom, 3]
+
+        overlap_atom = overlap[:, offset:extent]
+        rdm_mo_atom = rdm_mo[:, offset:extent]
+
+        charges.append(np.einsum('ij,ij->', rdm_mo_atom, overlap_atom))
+
+    active_mos = sorted([i for i in range(len(charges))], 
+                        key=lambda x: charges[x], reverse=True
+                        )[:n_act_mos]
+
+    # all mos not active are frozen
+    frozen_mos = [i for i in range(c_occ.shape[1]) if i not in active_mos]
+
+    return c_occ[:, active_mos], c_occ[:, frozen_mos]

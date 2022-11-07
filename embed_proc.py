@@ -15,7 +15,8 @@ from projectorEmbedding.embed_pyscf_replacements import energy_elec
 
 def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
                         mu_val=10**6, trunc_lambda=None,
-                        distribute_mos=pmm()):
+                        distribute_mos=pmm(), diis_space=8, max_cycle = 50,
+                        chk_file=None, chk_start=None):
     """
     Manby-like embedding procedure.
 
@@ -164,11 +165,18 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
     if hasattr(init_mf, 'with_df'):
         mf_embed = df.density_fit(mf_embed)
         mf_embed.with_df.auxbasis = init_mf.with_df.auxbasis
+    mf_embed.diis_space = diis_space
+    mf_embed.chkfile = chk_file
+    mf_embed.max_cycle = max_cycle
     mf_embed.get_hcore = lambda *args: hcore_a_in_b
     mf_embed.energy_elec = energy_elec.__get__(mf_embed, type(mf_embed))
 
     # run embedded SCF
-    tot_energy_a_in_b = mf_embed.kernel(dens['a'])
+    if chk_start:
+        init_dm = mf_embed.from_chk(chk_start)
+        tot_energy_a_in_b = mf_embed.kernel(init_dm)
+    else:
+        tot_energy_a_in_b = mf_embed.kernel(dens['a'])
 
     # get electronic energy for embedded part
     energy_a_in_b = tot_energy_a_in_b - mf_embed.energy_nuc()

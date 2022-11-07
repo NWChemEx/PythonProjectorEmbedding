@@ -9,6 +9,7 @@ from projectorEmbedding.embed_utils import truncate_basis
 from projectorEmbedding.embed_partition import mulliken_partition
 from projectorEmbedding.embed_partition import occupancy_partition
 from projectorEmbedding.embed_partition import spade_partition
+from projectorEmbedding.embed_partition import single_atom_mulliken_partition
 
 from projectorEmbedding.embed_proc import embedding_procedure
 

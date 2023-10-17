@@ -16,7 +16,8 @@ from projectorEmbedding.embed_pyscf_replacements import energy_elec
 def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
                         mu_val=10**6, trunc_lambda=None,
                         distribute_mos=pmm(), diis_space=8, max_cycle = 50,
-                        chk_file=None, chk_start=None):
+                        chk_file=None, chk_start=None, cc_econv=1e-07, 
+                        cc_tconv=1e-06):
     """
     Manby-like embedding procedure.
 
@@ -191,6 +192,8 @@ def embedding_procedure(init_mf, active_atoms=None, embed_meth=None,
         results = results + (embed_corr.e_corr,)
     elif 'ccsd' in embed_meth or 'ccsd(t)' in embed_meth:
         embed_corr = cc.CCSD(mf_embed)
+        embed_corr.conv_tol = cc_econv
+        embed_corr.conv_tol_normt = cc_tconv
         embed_corr.kernel()
         results = results + (embed_corr.emp2,)
         results = results + (embed_corr.e_corr - embed_corr.emp2,)

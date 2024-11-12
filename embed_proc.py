@@ -2,7 +2,6 @@
 Perform projector based embedding
 """
 import numpy as np
-from numpy.lib.arraysetops import isin
 from pyscf import scf, dft, mp, cc, df
 from projectorEmbedding.embed_utils import get_occ_coeffs
 from projectorEmbedding.embed_utils import get_mo_occ_a

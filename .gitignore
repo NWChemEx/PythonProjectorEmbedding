@@ -1,7 +1,58 @@
-__pycache__/
-*.py[cod]
+# Copyright 2023 NWChemEx-Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-.vscode/
+# These are extensions commonly used to denote temporary files
+*.tmp
+*.autosave
+*.bak
+
+# These are directories used by IDEs for storing settings
 .idea/
+.vscode/
 
+# These are common Python virtual enviornment directory names
+venv/
+docs/venv/
+
+# This is where Jupyter/IPython store backup files
+.ipynb_checkpoints/
+
+# Byte-compiled Python
+__pycache__/
+
+# These are common build directory names
+build*/
+docs/build
+docs/source/_build
+docs/doxyoutput
+docs/source/api
+*-build-*/
+_build/
+Debug/
+Release/
+
+# Users commonly store their specific CMake settings in a toolchain file
+toolchain.cmake
+
+# These are the default names for the components of the cache
+cache.db
+uuid.db
+
+#These are the resized images made using PIL in PluginPlayer
+info.png
+drop.png
+dropped.png
+
+*.py[cod]
 .DS_Store

@@ -33,7 +33,7 @@ O     -2.04032122     0.00000000     0.00000000
 H     -2.62140507     0.00000000    -0.78446839
 H     -2.62140507     0.00000000     0.78446839
 ''',
-basis="cc-pvdz", 
+basis="def2-tzvp", 
 verbose=4, unit='Angstrom', spin=5, charge=3)
 
 dft_scf = dft.UKS(molecule).density_fit()
@@ -46,12 +46,10 @@ dft_scf.grids.atom_grid = {
     'Fe': (140, 974),
     }   
 dft_scf_e = dft_scf.kernel()
-
-def spade_preset(pyscf_mf, active_atoms=None, c_occ=None):
-    return spade_partition(pyscf_mf, active_atoms=active_atoms, c_occ=c_occ, n_act_mos=[14, 9]) 
+# Check value: -1721.4251140527313
 
 embed_energy_breakdown = embed(
-    dft_scf, [0], embed_meth="mp2", mu_val=None, distribute_mos=spade_preset)
+    dft_scf, [0], embed_meth="mp2", mu_val=None, distribute_mos=spade_partition)
 
 # Print results
 print(embed_energy_breakdown)

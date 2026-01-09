@@ -2,6 +2,8 @@ import os
 import time
 
 from pyscf import gto, scf
+from projectorEmbedding import embedding_procedure
+from projectorEmbedding.embed_partition import mulliken_partition
 
 start_time = time.time()
 
@@ -248,25 +250,35 @@ H  -1.38997469    -2.64361007     1.25618563
 H  -3.06754276    -2.12957010     1.09603467
 """
 
+print("Getting Mol")
+mol = gto.Mole(atom=radon2, basis="sto-3g", charge=1, multiplicity=2).build()
+print("Got mol")
 
-mol = gto.Mole(atom=radon2, basis='sto-3g', charge=1, multiplicity = 2).build()
-
-
+print("Running MF")
 mf = scf.UKS(mol)
-mf.xc = 'B3LYP'
+mf.xc = "B3LYP"
 mf.max_cycle = 1000
 mf.diis_space = 12
 mf.kernel()
-
-#print(mf.get_ovlp())
+# print(mf.get_ovlp())
 # Print the energy
 print("Kohn-Sham Energy:", mf.e_tot)
 
-energy = embedding_procedure(mf, active_atoms=[0], embed_meth='MP2',
-                        mu_val=10**6, trunc_lambda=0,
-                        distribute_mos=mulliken_partition(), diis_space=8, max_cycle = 50,
-                        chk_file=None, chk_start=None, cc_econv=1e-07,
-                        cc_tconv=1e-06)
+print("Running embedding procedure.")
+energy = embedding_procedure(
+    mf,
+    active_atoms=[0],
+    embed_meth="MP2",
+    mu_val=10**6,
+    trunc_lambda=0,
+    distribute_mos=mulliken_partition(),
+    diis_space=8,
+    max_cycle=50,
+    chk_file=None,
+    chk_start=None,
+    cc_econv=1e-07,
+    cc_tconv=1e-06,
+)
 print(energy)
 end_time = time.time()
 elapsed_time = end_time - start_time

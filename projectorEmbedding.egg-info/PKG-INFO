@@ -1,0 +1,14 @@
+Metadata-Version: 2.1
+Name: projectorEmbedding
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: <3.9,>=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: pyscf>=2.10.0
+
+PythonProjectorEmbedding
+===
+
+A Python implementation of the Projector-based Embedding scheme.
+Requires [PySCF](https://pyscf.org/)

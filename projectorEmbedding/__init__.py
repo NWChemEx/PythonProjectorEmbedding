@@ -1,4 +1,5 @@
-""" __init__.py """
+"""__init__.py"""
+
 from projectorEmbedding.embed_utils import get_occ_coeffs
 from projectorEmbedding.embed_utils import get_mo_occ_a
 from projectorEmbedding.embed_utils import flatten_basis
